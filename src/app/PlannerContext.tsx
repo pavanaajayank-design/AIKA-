@@ -5,6 +5,7 @@ import { base, calculate, schema, airports, type Trip, type Place } from '../../
 import { createServices } from '../services';
 import { readClientConfig } from '../services/config';
 import type { PlanResult, AppSession, SavedTrip } from '../models/contracts';
+import { loadDraft, saveDraft, clearDraft } from '../services/draft-storage';
 export const freshTrip = (): Trip => ({ ...structuredClone(base), origin: '', destination: '', arrivalAirport: '', departureAirport: '', arrival: '', departure: '', airline: '', flight: '', entry: 'unknown', terminal: 'unknown', demo: false });
 export function validateStep(t: Trip, step: number) { if (step === 0) {
     if (!t.airline.trim())
@@ -25,6 +26,34 @@ function usePlannerState() {
     const [page, setPage] = useState('welcome'), [step, setStep] = useState(0), [trip, setTrip] = useState<Trip>(freshTrip), [result, setResult] = useState<PlanResult | null>(null), [error, setError] = useState(''), [busy, setBusy] = useState(false), [intro, setIntro] = useState(false), [confirmed, setConfirmed] = useState(false), [session, setSession] = useState<AppSession | null>(null), [authLoading, setAuthLoading] = useState(true), [passwordRecovery, setPasswordRecovery] = useState(false), [trips, setTrips] = useState<SavedTrip[]>([]), [activeId, setActiveId] = useState<string | null>(null), [notice, setNotice] = useState('');
     const [services] = useState(() => { const config = readClientConfig(import.meta.env || {}); return createServices(config.mode, config.baseUrl); });
     const request = useRef(0);
+    const restoredIdentityRef = useRef<string | null | undefined>(undefined);
+
+    const restoreDraftFor = (activeSession: AppSession | null) => {
+        const id = activeSession ? activeSession.id : null;
+        restoredIdentityRef.current = id;
+        const draft = loadDraft(id);
+        if (draft) {
+            setTrip(draft.trip);
+            setStep(draft.step);
+            setResult(draft.result);
+            setActiveId(draft.activeId);
+            setConfirmed(draft.confirmed);
+
+            const currentHash = typeof window !== 'undefined' ? location.hash.slice(1) : '';
+            if (!currentHash || currentHash === 'welcome' || currentHash === 'login' || currentHash === 'signup') {
+                setPage(draft.page);
+                if (typeof window !== 'undefined') location.hash = draft.page;
+            }
+        } else {
+            // Fresh account state when no draft exists
+            setTrip(freshTrip());
+            setStep(0);
+            setResult(null);
+            setActiveId(null);
+            setConfirmed(false);
+        }
+    };
+
     useEffect(() => { const update = () => { const p = location.hash.slice(1); setPage(['home', 'welcome', 'login', 'signup', 'forgot', 'planner', 'results', 'how', 'privacy', 'trips', 'account'].includes(p) ? p : 'welcome'); window.scrollTo(0, 0); }; window.addEventListener('hashchange', update); const initial = requestAnimationFrame(() => { update(); try {
         if (!sessionStorage.getItem('aika-intro') && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
             setIntro(true);
@@ -54,8 +83,10 @@ function usePlannerState() {
                 setPasswordRecovery(false);
                 setTrips([]);
                 setActiveId(null);
+                restoreDraftFor(null);
             } else if (event === 'SIGNED_IN' && nextSession) {
-                go('home');
+                services.trips.list().then(setTrips).catch(() => {});
+                restoreDraftFor(nextSession);
             } else if (!nextSession && event !== 'INITIAL_SESSION') {
                 setNotice('Your session could not be verified. Please sign in again.');
             }
@@ -64,42 +95,148 @@ function usePlannerState() {
         const startingRevision = eventRevision;
         void services.auth.restoreSession()
             .then((restored) => {
-                if (active && eventRevision === startingRevision) setSession(restored);
+                if (active && eventRevision === startingRevision) {
+                    setSession(restored);
+                    if (restored) {
+                        services.trips.list().then(setTrips).catch(() => {});
+                    }
+                    if (restoredIdentityRef.current === undefined) {
+                        restoreDraftFor(restored);
+                    }
+                }
             })
             .catch(() => {
                 if (active && eventRevision === startingRevision) {
                     setSession(null);
                     setNotice('We could not verify your saved session. Please sign in again.');
+                    if (restoredIdentityRef.current === undefined) {
+                        restoreDraftFor(null);
+                    }
                 }
             })
             .finally(() => {
-                if (active && eventRevision === startingRevision) setAuthLoading(false);
+                if (active && eventRevision === startingRevision) {
+                    setAuthLoading(false);
+                    if (restoredIdentityRef.current === undefined) {
+                        restoreDraftFor(null);
+                    }
+                }
             });
 
         return () => {
             active = false;
             unsubscribe();
         };
-    }, [services.auth]);
-    const startNew = () => { request.current++; setBusy(false); setTrip(freshTrip()); setResult(null); setStep(0); setActiveId(null); setConfirmed(false); setNotice(''); go('planner'); };
+    }, [services.auth, services.trips]);
+
+    // Debounced automatic draft persistence
+    useEffect(() => {
+        if (authLoading || restoredIdentityRef.current === undefined) return;
+        const currentId = session ? session.id : null;
+        if (restoredIdentityRef.current !== currentId) return;
+
+        const timer = setTimeout(() => {
+            saveDraft(currentId, {
+                page,
+                step,
+                trip,
+                result,
+                activeId,
+                confirmed,
+            });
+        }, 200);
+
+        return () => clearTimeout(timer);
+    }, [page, step, trip, result, activeId, confirmed, session, authLoading]);
+
+    // Save immediately before page unload
+    useEffect(() => {
+        const handleBeforeUnload = () => {
+            if (!authLoading && restoredIdentityRef.current !== undefined) {
+                const currentId = session ? session.id : null;
+                saveDraft(currentId, {
+                    page,
+                    step,
+                    trip,
+                    result,
+                    activeId,
+                    confirmed,
+                });
+            }
+        };
+        window.addEventListener('beforeunload', handleBeforeUnload);
+        return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+    }, [page, step, trip, result, activeId, confirmed, session, authLoading]);
+
+    const startNew = () => {
+        request.current++;
+        setBusy(false);
+        const fresh = freshTrip();
+        setTrip(fresh);
+        setResult(null);
+        setStep(0);
+        setActiveId(null);
+        setConfirmed(false);
+        setNotice('');
+        clearDraft(session ? session.id : null);
+        go('planner');
+    };
     const update = <K extends keyof Trip>(key: K, value: Trip[K]) => { setTrip(t => ({ ...t, [key]: value })); setConfirmed(false); };
-    async function generate(next = trip) { const id = ++request.current; setBusy(true); setError(''); try {
-        const data = await services.planner.plan(next);
-        if (id !== request.current)
+    async function generate(next = trip) {
+        const id = ++request.current;
+        setBusy(true);
+        setError('');
+        let calculatedData: PlanResult | null = null;
+        try {
+            calculatedData = await services.planner.plan(next);
+            if (id !== request.current) return;
+            setResult(calculatedData);
+            setTrip(next);
+            go('results');
+        } catch (e) {
+            if (id === request.current) {
+                setError(e instanceof Error ? e.message : 'Please check your details and try again.');
+                setBusy(false);
+            }
             return;
-        setResult(data);
-        setTrip(next);
-        go('results');
+        }
+
+        // Automatic itinerary saving for authenticated sessions
+        if (session && calculatedData && id === request.current) {
+            try {
+                if (activeId) {
+                    await services.trips.update(activeId, { input: next, result: calculatedData });
+                    if (id === request.current) {
+                        setNotice('Layover itinerary updated in My Trips.');
+                    }
+                } else {
+                    const saved = await services.trips.create(next, calculatedData);
+                    if (id === request.current) {
+                        setActiveId(saved.id);
+                        setNotice('Layover itinerary saved to My Trips.');
+                    }
+                }
+                if (id === request.current) {
+                    const list = await services.trips.list();
+                    setTrips(list);
+                }
+            } catch {
+                // Calculation is preserved even if auto-save fails
+                if (id === request.current) {
+                    setNotice('Your layover is calculated, but could not be saved to My Trips. You can retry saving using the button above.');
+                }
+            } finally {
+                if (id === request.current) {
+                    setBusy(false);
+                }
+            }
+        } else {
+            if (id === request.current) {
+                setBusy(false);
+            }
+        }
     }
-    catch (e) {
-        if (id === request.current)
-            setError(e instanceof Error ? e.message : 'Please check your details and try again.');
-    }
-    finally {
-        if (id === request.current)
-            setBusy(false);
-    } }
-    function demo() { const arrival = DateTime.now().setZone('Asia/Kolkata').plus({ days: 2 }).startOf('day').set({ hour: 5 }); const t = { ...structuredClone(base), arrival: arrival.toFormat("yyyy-MM-dd'T'HH:mm"), departure: arrival.set({ hour: 16 }).toFormat("yyyy-MM-dd'T'HH:mm"), airline: 'Demo airline', flight: 'XX 101', entry: 'yes' as const, terminal: 'no' as const, demo: true, selected: 'devanahalli', routeOut: 30, routeBack: 40 }; setActiveId(null); generate(t); }
+    function demo() { const arrival = DateTime.now().setZone('Asia/Kolkata').plus({ days: 2 }).startOf('day').set({ hour: 5 }); const t = { ...structuredClone(base), arrival: arrival.toFormat("yyyy-MM-dd'T'HH:mm"), departure: arrival.set({ hour: 16 }).toFormat("yyyy-MM-dd'T'HH:mm"), airline: 'IndiGo', flight: '6E 123', entry: 'yes' as const, terminal: 'no' as const, demo: false, selected: 'devanahalli', routeOut: 30, routeBack: 40 }; setActiveId(null); generate(t); }
     function select(p: Place) { generate({ ...trip, selected: p.id, routeOut: p.out, routeBack: p.back, visit: p.visit, scenario: { ...trip.scenario, unavailable: false } }); }
     function next() { try {
         validateStep(trip, step);
@@ -111,7 +248,7 @@ function usePlannerState() {
     } }
     async function save() { if (!result)
         return; if (!session) {
-        setNotice('Start a demo session to preview My Trips. Your active plan is kept while you switch screens.');
+        setNotice('Sign in to save this layover to your account. Your active plan will be kept while you log in.');
         go('login');
         return;
     } setBusy(true); try {
@@ -119,29 +256,29 @@ function usePlannerState() {
         setResult(current);
         if (activeId) {
             await services.trips.update(activeId, { input: trip, result: current });
-            setNotice('Updated in memory for this visit only.');
+            setNotice('Trip updated successfully in My Trips.');
         }
         else {
             const saved = await services.trips.create(trip, current);
             setActiveId(saved.id);
-            setNotice('Added to demo trips for this visit only.');
+            setNotice('Layover itinerary saved to My Trips.');
         }
         setTrips(await services.trips.list());
     }
     catch (e) {
-        setError(e instanceof Error ? e.message : 'Unable to save this demo trip.');
+        setError(e instanceof Error ? e.message : 'Unable to save this trip.');
     }
     finally {
         setBusy(false);
     } }
     function openTrip(saved: SavedTrip, edit = false) { setActiveId(saved.id); setTrip(structuredClone(saved.input)); setResult(structuredClone(saved.result)); setStep(0); setConfirmed(false); go(edit ? 'planner' : 'results'); }
-    async function logout() { request.current++; try { await services.auth.signOut(); services.trips.clear(); setSession(null); setTrips([]); setActiveId(null); setPasswordRecovery(false); setNotice(session?.mode === 'demo' ? 'Demo session ended. Demo trip records have been cleared.' : 'You have been signed out.'); go('welcome'); } catch { setError('We could not sign you out. Please try again.'); } }
+    async function logout() { request.current++; try { await services.auth.signOut(); services.trips.clear(); setSession(null); setTrips([]); setActiveId(null); setPasswordRecovery(false); setNotice('You have been signed out.'); go('welcome'); } catch { setError('We could not sign you out. Please try again.'); } }
     return { page, setPage, step, setStep, trip, setTrip, result, setResult, error, setError, busy, setBusy, intro, setIntro, confirmed, setConfirmed, go, startNew, update, generate, demo, select, next, services, session, setSession, authLoading, passwordRecovery, setPasswordRecovery, trips, setTrips, activeId, setActiveId, notice, setNotice, save, openTrip, logout };
 }
 type PlannerState = ReturnType<typeof usePlannerState>;
-const Context = createContext<PlannerState | null>(null);
+export const PlannerContext = createContext<PlannerState | null>(null);
 export function PlannerProvider({ children }: {
     children: ReactNode;
-}) { const value = usePlannerState(); return <Context.Provider value={value}>{children}</Context.Provider>; }
-export function usePlanner() { const value = useContext(Context); if (!value)
+}) { const value = usePlannerState(); return <PlannerContext.Provider value={value}>{children}</PlannerContext.Provider>; }
+export function usePlanner() { const value = useContext(PlannerContext); if (!value)
     throw Error('AIKA screens must be inside PlannerProvider.'); return value; }

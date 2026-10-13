@@ -58,3 +58,6 @@ next-env.d.ts
 *.tsbuildinfo
 /out/
 /.openai/
+
+.vercel
+.env*

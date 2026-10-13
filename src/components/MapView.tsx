@@ -24,5 +24,5 @@ export default function MapView({ places, selected, onSelect, airport }: {
             ])]), { padding: [35, 35], maxZoom: 12 });
         fitted.current = true;
     } }, [ready, places, selected, airport]);
-    return <div className="map-wrap"><div ref={el} className="map" aria-label="Interactive demo map of nearby places"/>{error && <p className="map-error" role="status">{error}</p>}<span className="map-caption">Demo markers · no live navigation route</span></div>;
+    return <div className="map-wrap"><div ref={el} className="map" aria-label="Interactive map of nearby places"/>{error && <p className="map-error" role="status">{error}</p>}<span className="map-caption">Estimated locations · verify live transport and gate times</span></div>;
 }

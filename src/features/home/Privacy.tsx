@@ -1,1 +1,37 @@
-export default function Privacy() { return <section className="article-page"><span className="eyebrow">LESS DATA. MORE CLARITY.</span><h1>Your trip stays yours.</h1><div className="panel"><h2>Frontend preview and privacy</h2><p>This phase uses local calculations and in-memory demo services. Login and signup preview the interface; they do not verify identity or create a real account. Passwords are checked in memory and discarded. My Trips records are not persisted. Refreshing, closing or ending the demo session clears them.</p><p>No passport information, booking references or boarding-pass uploads are requested. The logo intro uses session storage for a single “already shown” flag. The Help guide answers local FAQ questions without sending your messages to Gemini.</p><p>The map requests OpenStreetMap tiles and the fonts may load from Google Fonts. Those providers receive normal network information. Both have fallback states. No paid API is needed to use the frontend.</p><p>The existing backend integrations remain separate and opt-in. A future authenticated backend must independently enforce trip ownership and database policies. The private hosted preview has a platform access screen; that screen is separate from AIKA’s demo account interface. The downloadable frontend can run locally or on your chosen static host.</p></div><a href="#home" className="button">Back to AIKA</a></section>; }
+export default function Privacy() {
+  return (
+    <section className="article-page">
+      <span className="eyebrow">DATA SECURITY & TRUST</span>
+      <h1>Your privacy stays in your hands.</h1>
+      <div className="panel">
+        <h2>Privacy and data practices at AIKA</h2>
+        <p>
+          AIKA is designed around simplicity, clarity, and data minimization. We believe travel planning should be thoughtful, reliable, and respectful of your personal boundaries.
+        </p>
+
+        <h3>Data minimization</h3>
+        <p>
+          We only ask for the flight schedule and itinerary preferences required to calculate your available layover window. AIKA never asks for, processes, or stores sensitive travel documents such as passport numbers, national ID cards, ticket purchase receipts, or payment information.
+        </p>
+
+        <h3>Account security and authorization</h3>
+        <p>
+          When you create an account, your authentication credentials are managed with secure, industry-standard cryptographic protection. Your saved trips in My Trips are guarded by database-level Row Level Security (RLS), ensuring that your private itineraries can only ever be accessed or modified by your authenticated session.
+        </p>
+
+        <h3>Itinerary calculation transparency</h3>
+        <p>
+          All layover time breakdowns, buffer protections, and scenario simulations run deterministically. Calculations are transparently reported so you know exactly which assumptions were made for airport procedures, road travel, and gate return deadlines.
+        </p>
+
+        <h3>External providers and mapping</h3>
+        <p>
+          Map views display open-source OpenStreetMap tiles with proper attribution. Weather and routing estimates query provider endpoints using airport and destination coordinates only—never your personal identity or booking records.
+        </p>
+      </div>
+      <a href="#home" className="button">
+        Back to AIKA
+      </a>
+    </section>
+  );
+}
