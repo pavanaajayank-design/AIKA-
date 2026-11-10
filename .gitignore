@@ -57,7 +57,8 @@ next-env.d.ts
 !.env.example
 *.tsbuildinfo
 /out/
-/.openai/
+/.openai/*
+!/.openai/hosting.json
 
 .vercel
 .env*
