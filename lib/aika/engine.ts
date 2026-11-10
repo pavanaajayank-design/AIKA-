@@ -1,12 +1,20 @@
 import { DateTime, IANAZone } from 'luxon';
 import { z } from 'zod';
-export const airports: Record<string, {
-    name: string;
-    zone: string;
-    lat: number;
-    lng: number;
-}> = {
-    BLR: { name: 'Bengaluru · Kempegowda', zone: 'Asia/Kolkata', lat: 13.1986, lng: 77.7066 }, CCJ: { name: 'Kozhikode · Calicut', zone: 'Asia/Kolkata', lat: 11.1368, lng: 75.9553 }, DEL: { name: 'Delhi · Indira Gandhi', zone: 'Asia/Kolkata', lat: 28.5562, lng: 77.1000 }, BOM: { name: 'Mumbai · Chhatrapati Shivaji', zone: 'Asia/Kolkata', lat: 19.0896, lng: 72.8656 }, MAA: { name: 'Chennai', zone: 'Asia/Kolkata', lat: 12.9941, lng: 80.1709 }, HYD: { name: 'Hyderabad · Rajiv Gandhi', zone: 'Asia/Kolkata', lat: 17.2403, lng: 78.4294 }, COK: { name: 'Kochi', zone: 'Asia/Kolkata', lat: 10.1518, lng: 76.393 }, DXB: { name: 'Dubai', zone: 'Asia/Dubai', lat: 25.2532, lng: 55.3657 }, JFK: { name: 'New York · JFK', zone: 'America/New_York', lat: 40.6413, lng: -73.7781 }, LHR: { name: 'London · Heathrow', zone: 'Europe/London', lat: 51.47, lng: -0.4543 }
+import {
+    airports,
+    type AirportRecord,
+    domesticCodes,
+    isDomesticIndianAirport,
+    getAirportTimezone,
+    searchAirports,
+} from './airports';
+export {
+    airports,
+    type AirportRecord,
+    domesticCodes,
+    isDomesticIndianAirport,
+    getAirportTimezone,
+    searchAirports,
 };
 const minutes = z.number().finite().min(0).max(1440);
 const code = z.string().trim().toUpperCase().regex(/^[A-Z]{3}$/);

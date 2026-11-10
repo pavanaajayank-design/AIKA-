@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { ArrowRight, Eye, EyeOff, ShieldCheck, Clock, MapPin, Mail, Compass } from 'lucide-react';
 import { z } from 'zod';
 import { usePlanner } from '../../app/PlannerContext';
@@ -13,7 +13,24 @@ export default function AuthPage() {
     const forgot = page === 'forgot';
     const recovering = forgot && passwordRecovery;
     const welcome = page === 'welcome';
-    const [name, setName] = useState(''), [email, setEmail] = useState(''), [password, setPassword] = useState(''), [confirm, setConfirm] = useState(''), [passwordVisible, setPasswordVisible] = useState(false), [confirmVisible, setConfirmVisible] = useState(false), [busy, setBusy] = useState(false), [error, setError] = useState(''), [success, setSuccess] = useState('');
+    const [name, setName] = useState('');
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+    const [confirm, setConfirm] = useState('');
+    const [passwordVisible, setPasswordVisible] = useState(false);
+    const [confirmVisible, setConfirmVisible] = useState(false);
+    const [busy, setBusy] = useState(false);
+    const [error, setError] = useState('');
+    const [success, setSuccess] = useState('');
+
+    // Auto-dismiss temporary auth success messages after 5.5s
+    useEffect(() => {
+        if (!success) return;
+        const timer = setTimeout(() => {
+            setSuccess((curr) => (curr === success ? '' : curr));
+        }, 5500);
+        return () => clearTimeout(timer);
+    }, [success]);
 
     async function submit(event: React.FormEvent) {
         event.preventDefault();
@@ -98,44 +115,165 @@ export default function AuthPage() {
                 : signup ? 'Create your AIKA account to save and access your layover itineraries.'
                     : 'Sign in to your AIKA account.';
 
-    return <section className="auth-layout">
-        <div className="auth-story">
-            <span className="eyebrow">EXPLORE ON TIME</span>
-            <h1>There’s a little<br />more to your<br /><span>journey.</span></h1>
-            <p>Make every minute count. Find out what fits between your flights, with time to get back.</p>
-            <div className="auth-orbit"><span className="orbit-center"><Compass size={47}/></span><span className="orbit-chip orbit-one"><Clock size={16}/> Time to explore</span><span className="orbit-chip orbit-two"><MapPin size={16}/> A nearby discovery</span><span className="orbit-chip orbit-three"><ShieldCheck size={16}/> Your flight comes first</span></div>
-            <p className="auth-footnote">A thoughtful plan. A little breathing room.</p>
-        </div>
-        <div className="auth-surface">
-            <Brand large/>
-            <span className="eyebrow">MAKE EVERY MINUTE COUNT.</span>
-            <h2>{heading}</h2>
-            <p className="muted">{description}</p>
-            {authLoading && <p className="form-note" role="status">Checking your session…</p>}
-            {notice && <p className="form-note" role="status">{notice}</p>}
-            {success && <p className="form-note" role="status">{success}</p>}
+    return (
+        <section className="auth-layout">
+            <div className="auth-story">
+                <span className="eyebrow">EXPLORE ON TIME</span>
+                <h1>There’s a little<br />more to your<br /><span>journey.</span></h1>
+                <p>Make every minute count. Find out what fits between your flights, with time to get back.</p>
+                <div className="auth-orbit">
+                    <span className="orbit-center"><Compass size={47} /></span>
+                    <span className="orbit-chip orbit-one"><Clock size={16} /> Time to explore</span>
+                    <span className="orbit-chip orbit-two"><MapPin size={16} /> A nearby discovery</span>
+                    <span className="orbit-chip orbit-three"><ShieldCheck size={16} /> Your flight comes first</span>
+                </div>
+                <p className="auth-footnote">A thoughtful plan. A little breathing room.</p>
+            </div>
+            <div className="auth-surface">
+                <Brand large />
+                <span className="eyebrow">MAKE EVERY MINUTE COUNT.</span>
+                <h2>{heading}</h2>
+                <p className="muted">{description}</p>
+                {authLoading && <p className="form-note" role="status">Checking your session…</p>}
+                {notice && <p className="form-note" role="status">{notice}</p>}
+                {success && <p className="form-note" role="status">{success}</p>}
 
-            {welcome ? <div className="welcome-actions">
-                <button className="button" disabled={authLoading} onClick={() => { setNotice(''); go('login'); }}>Log in <ArrowRight size={17}/></button>
-                <button className="button secondary" disabled={authLoading} onClick={() => { setNotice(''); go('signup'); }}>Sign up <ArrowRight size={17}/></button>
-                <button className="text-button" onClick={() => go('home')}>Continue as a guest <ArrowRight size={16}/></button>
-                {session && <small>Signed in as {session.name} ({session.email})</small>}
-            </div> : <>
-                <div className="auth-tabs"><button className={!signup && !forgot ? 'active' : ''} onClick={() => { setError(''); setSuccess(''); go('login'); }}>Log in</button><button className={signup ? 'active' : ''} onClick={() => { setError(''); setSuccess(''); setNotice(''); go('signup'); }}>Sign up</button></div>
-                <form onSubmit={submit} className="auth-form">
-                    {signup && <label className="field"><span>Your name</span><input value={name} onChange={e => setName(e.target.value)} required autoComplete="name" maxLength={80}/></label>}
-                    {!recovering && <label className="field"><span>Email address</span><input type="email" placeholder="you@example.com" value={email} onChange={e => setEmail(e.target.value)} required autoComplete="email" maxLength={254}/></label>}
-                    {(!forgot || recovering) && <>
-                        <label className="field"><span>{recovering ? 'New password' : 'Password'}</span><div className="password-input"><input type={passwordVisible ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)} required minLength={8} maxLength={128} autoComplete={signup || recovering ? 'new-password' : 'current-password'}/><button type="button" aria-label={passwordVisible ? 'Hide password' : 'Show password'} aria-pressed={passwordVisible} onClick={() => setPasswordVisible(!passwordVisible)}>{passwordVisible ? <EyeOff size={18}/> : <Eye size={18}/>}</button></div><small>Password must be at least 8 characters.</small></label>
-                        {(signup || recovering) && <label className="field"><span>Confirm password</span><div className="password-input"><input type={confirmVisible ? 'text' : 'password'} value={confirm} onChange={e => setConfirm(e.target.value)} required minLength={8} maxLength={128} autoComplete="new-password"/><button type="button" aria-label={confirmVisible ? 'Hide confirm password' : 'Show confirm password'} aria-pressed={confirmVisible} onClick={() => setConfirmVisible(!confirmVisible)}>{confirmVisible ? <EyeOff size={18}/> : <Eye size={18}/>}</button></div></label>}
-                        {!signup && !recovering && <button type="button" className="text-button forgot-link" onClick={() => { setPasswordRecovery(false); setSuccess(''); go('forgot'); }}>Forgot password?</button>}
-                    </>}
-                    {error && <p className="error" role="alert">{error}</p>}
-                    <button className="button full-width" disabled={busy || authLoading}>{busy ? 'Working…' : recovering ? 'Update password' : forgot ? 'Send reset link' : signup ? 'Create account' : 'Log in'} {forgot ? <Mail size={17}/> : <ArrowRight size={17}/>}</button>
-                </form>
-                {!forgot && <><div className="auth-divider"><span />or<span /></div><button className="button secondary full-width" onClick={() => go('home')}>Continue as a guest <ArrowRight size={16}/></button></>}
-            </>}
-            <a href="#privacy" className="auth-privacy">Your information, handled thoughtfully.</a>
-        </div>
-    </section>;
+                {welcome ? (
+                    <div className="welcome-actions">
+                        <button className="button" disabled={authLoading} onClick={() => { setNotice(''); go('login'); }}>
+                            Log in <ArrowRight size={17} />
+                        </button>
+                        <button className="button secondary" disabled={authLoading} onClick={() => { setNotice(''); go('signup'); }}>
+                            Sign up <ArrowRight size={17} />
+                        </button>
+                        <button className="text-button" onClick={() => go('home')}>
+                            Continue as a guest <ArrowRight size={16} />
+                        </button>
+                        {session && <small>Signed in as {session.name} ({session.email})</small>}
+                    </div>
+                ) : (
+                    <>
+                        <div className="auth-tabs">
+                            <button
+                                className={!signup && !forgot ? 'active' : ''}
+                                onClick={() => { setError(''); setSuccess(''); go('login'); }}
+                            >
+                                Log in
+                            </button>
+                            <button
+                                className={signup ? 'active' : ''}
+                                onClick={() => { setError(''); setSuccess(''); setNotice(''); go('signup'); }}
+                            >
+                                Sign up
+                            </button>
+                        </div>
+                        <form onSubmit={submit} className="auth-form">
+                            {signup && (
+                                <label className="field">
+                                    <span>Your name</span>
+                                    <input
+                                        value={name}
+                                        onChange={e => setName(e.target.value)}
+                                        required
+                                        autoComplete="name"
+                                        maxLength={80}
+                                    />
+                                </label>
+                            )}
+                            {!recovering && (
+                                <label className="field">
+                                    <span>Email address</span>
+                                    <input
+                                        type="email"
+                                        placeholder="you@example.com"
+                                        value={email}
+                                        onChange={e => setEmail(e.target.value)}
+                                        required
+                                        autoComplete="email"
+                                        maxLength={254}
+                                    />
+                                </label>
+                            )}
+                            {(!forgot || recovering) && (
+                                <>
+                                    <label className="field">
+                                        <span>{recovering ? 'New password' : 'Password'}</span>
+                                        <div className="password-input">
+                                            <input
+                                                type={passwordVisible ? 'text' : 'password'}
+                                                value={password}
+                                                onChange={e => setPassword(e.target.value)}
+                                                required
+                                                minLength={8}
+                                                maxLength={128}
+                                                autoComplete={signup || recovering ? 'new-password' : 'current-password'}
+                                            />
+                                            <button
+                                                type="button"
+                                                aria-label={passwordVisible ? 'Hide password' : 'Show password'}
+                                                aria-pressed={passwordVisible}
+                                                onClick={() => setPasswordVisible(!passwordVisible)}
+                                            >
+                                                {passwordVisible ? <EyeOff size={18} /> : <Eye size={18} />}
+                                            </button>
+                                        </div>
+                                        <small>Password must be at least 8 characters.</small>
+                                    </label>
+                                    {(signup || recovering) && (
+                                        <label className="field">
+                                            <span>Confirm password</span>
+                                            <div className="password-input">
+                                                <input
+                                                    type={confirmVisible ? 'text' : 'password'}
+                                                    value={confirm}
+                                                    onChange={e => setConfirm(e.target.value)}
+                                                    required
+                                                    minLength={8}
+                                                    maxLength={128}
+                                                    autoComplete="new-password"
+                                                />
+                                                <button
+                                                    type="button"
+                                                    aria-label={confirmVisible ? 'Hide confirm password' : 'Show confirm password'}
+                                                    aria-pressed={confirmVisible}
+                                                    onClick={() => setConfirmVisible(!confirmVisible)}
+                                                >
+                                                    {confirmVisible ? <EyeOff size={18} /> : <Eye size={18} />}
+                                                </button>
+                                            </div>
+                                        </label>
+                                    )}
+                                    {!signup && !recovering && (
+                                        <button
+                                            type="button"
+                                            className="text-button forgot-link"
+                                            onClick={() => { setPasswordRecovery(false); setSuccess(''); go('forgot'); }}
+                                        >
+                                            Forgot password?
+                                        </button>
+                                    )}
+                                </>
+                            )}
+                            {error && <p className="error" role="alert">{error}</p>}
+                            <button className="button full-width" disabled={busy || authLoading}>
+                                {busy ? 'Working…' : recovering ? 'Update password' : forgot ? 'Send reset link' : signup ? 'Create account' : 'Log in'}{' '}
+                                {forgot ? <Mail size={17} /> : <ArrowRight size={17} />}
+                            </button>
+                        </form>
+                        {!forgot && (
+                            <>
+                                <div className="auth-divider">
+                                    <span />or<span />
+                                </div>
+                                <button className="button secondary full-width" onClick={() => go('home')}>
+                                    Continue as a guest <ArrowRight size={16} />
+                                </button>
+                            </>
+                        )}
+                    </>
+                )}
+                <a href="#privacy" className="auth-privacy">Your information, handled thoughtfully.</a>
+            </div>
+        </section>
+    );
 }

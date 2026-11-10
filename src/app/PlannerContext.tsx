@@ -1,39 +1,93 @@
 'use client';
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
-import { DateTime } from 'luxon';
-import { base, calculate, schema, airports, type Trip, type Place } from '../../lib/aika/engine';
+import { DateTime, IANAZone } from 'luxon';
+import { base, calculate, schema, airports, isDomesticIndianAirport, type Trip, type Place } from '../../lib/aika/engine';
 import { createServices } from '../services';
 import { readClientConfig } from '../services/config';
 import type { PlanResult, AppSession, SavedTrip } from '../models/contracts';
 import { loadDraft, saveDraft, clearDraft } from '../services/draft-storage';
-export const freshTrip = (): Trip => ({ ...structuredClone(base), origin: '', destination: '', arrivalAirport: '', departureAirport: '', arrival: '', departure: '', airline: '', flight: '', entry: 'unknown', terminal: 'unknown', demo: false });
-export function validateStep(t: Trip, step: number) { if (step === 0) {
-    if (!t.airline.trim())
-        throw Error('Enter the connecting airline.');
-    if (!/^[A-Z0-9]{2,3}\s?\d{1,4}[A-Z]?$/i.test(t.flight.trim()))
-        throw Error('Enter a flight number such as 6E 123 or EK 567.');
-    if (!airports[t.arrivalAirport] || !['BLR', 'CCJ', 'DEL', 'BOM', 'MAA', 'HYD', 'COK'].includes(t.arrivalAirport))
-        throw Error('Select a supported Indian arrival airport.');
-    if (!airports[t.departureAirport])
-        throw Error('Select a supported departure airport.');
-    if (!/^[A-Z]{3}$/.test(t.origin) || !/^[A-Z]{3}$/.test(t.destination))
-        throw Error('Enter a three-letter origin and final destination code.');
-    calculate({ ...t, routeOut: 30, routeBack: 30 });
+export const freshTrip = (): Trip => ({ ...structuredClone(base), origin: '', destination: '', arrivalAirport: '', departureAirport: '', arrival: '', departure: '', arrivalZone: '', departureZone: '', airline: '', flight: '', entry: 'unknown', terminal: 'unknown', demo: false });
+export function validateStep(t: Trip, step: number) {
+    if (step === 0) {
+        if (!t.airline.trim())
+            throw Error('Enter the connecting airline.');
+        if (!/^[A-Z0-9]{2,3}\s?\d{1,4}[A-Z]?$/i.test(t.flight.trim()))
+            throw Error('Enter a flight number such as 6E 123 or EK 567.');
+        if (!airports[t.arrivalAirport])
+            throw Error('Select a supported arrival airport.');
+        if (!airports[t.departureAirport])
+            throw Error('Select a supported departure airport.');
+        const az = airports[t.arrivalAirport]?.zone || t.arrivalZone || '';
+        if (!az || !IANAZone.isValidZone(az))
+            throw Error('Time zone is unavailable for the selected arrival airport.');
+        const dz = airports[t.departureAirport]?.zone || t.departureZone || '';
+        if (!dz || !IANAZone.isValidZone(dz))
+            throw Error('Time zone is unavailable for the selected departure airport.');
+        if (!/^[A-Z]{3}$/.test(t.origin) || !/^[A-Z]{3}$/.test(t.destination))
+            throw Error('Enter a three-letter origin and final destination code.');
+        calculate({ ...t, routeOut: 30, routeBack: 30 });
+    } else {
+        schema.parse(t);
+    }
 }
-else
-    schema.parse(t); }
+export const NOTIFICATION_DEFAULT_DELAY = 5500;
+
 function usePlannerState() {
-    const [page, setPage] = useState('welcome'), [step, setStep] = useState(0), [trip, setTrip] = useState<Trip>(freshTrip), [result, setResult] = useState<PlanResult | null>(null), [error, setError] = useState(''), [busy, setBusy] = useState(false), [intro, setIntro] = useState(false), [confirmed, setConfirmed] = useState(false), [session, setSession] = useState<AppSession | null>(null), [authLoading, setAuthLoading] = useState(true), [passwordRecovery, setPasswordRecovery] = useState(false), [trips, setTrips] = useState<SavedTrip[]>([]), [activeId, setActiveId] = useState<string | null>(null), [notice, setNotice] = useState('');
+    const [page, setPage] = useState('welcome'),
+        [step, setStep] = useState(0),
+        [trip, setTrip] = useState<Trip>(freshTrip),
+        [result, setResult] = useState<PlanResult | null>(null),
+        [error, setError] = useState(''),
+        [busy, setBusy] = useState(false),
+        [intro, setIntro] = useState(false),
+        [confirmed, setConfirmed] = useState(false),
+        [session, setSession] = useState<AppSession | null>(null),
+        [authLoading, setAuthLoading] = useState(true),
+        [passwordRecovery, setPasswordRecovery] = useState(false),
+        [trips, setTrips] = useState<SavedTrip[]>([]),
+        [activeId, setActiveId] = useState<string | null>(null),
+        [notice, setNoticeRaw] = useState(''),
+        [noticeVersion, setNoticeVersion] = useState(0);
+
     const [services] = useState(() => { const config = readClientConfig(import.meta.env || {}); return createServices(config.mode, config.baseUrl); });
     const request = useRef(0);
     const restoredIdentityRef = useRef<string | null | undefined>(undefined);
+    const lastNoticeSetTimeRef = useRef(0);
+
+    const setNotice: React.Dispatch<React.SetStateAction<string>> = (updater) => {
+        lastNoticeSetTimeRef.current = Date.now();
+        setNoticeRaw((curr) => {
+            const nextVal = typeof updater === 'function' ? updater(curr) : updater;
+            return nextVal;
+        });
+        setNoticeVersion((v) => v + 1);
+    };
+
+    // Auto-dismiss all temporary notifications globally after ~5.5s
+    useEffect(() => {
+        if (!notice) return;
+        const timer = setTimeout(() => {
+            setNoticeRaw((curr) => (curr === notice ? '' : curr));
+        }, NOTIFICATION_DEFAULT_DELAY);
+        return () => clearTimeout(timer);
+    }, [notice, noticeVersion]);
 
     const restoreDraftFor = (activeSession: AppSession | null) => {
         const id = activeSession ? activeSession.id : null;
         restoredIdentityRef.current = id;
         const draft = loadDraft(id);
         if (draft) {
-            setTrip(draft.trip);
+            const restoredTrip = { ...draft.trip };
+            if (restoredTrip.arrivalAirport && airports[restoredTrip.arrivalAirport]) {
+                restoredTrip.arrivalZone = airports[restoredTrip.arrivalAirport].zone;
+                if (isDomesticIndianAirport(restoredTrip.arrivalAirport)) {
+                    restoredTrip.entry = 'yes';
+                }
+            }
+            if (restoredTrip.departureAirport && airports[restoredTrip.departureAirport]) {
+                restoredTrip.departureZone = airports[restoredTrip.departureAirport].zone;
+            }
+            setTrip(restoredTrip);
             setStep(draft.step);
             setResult(draft.result);
             setActiveId(draft.activeId);
@@ -54,14 +108,42 @@ function usePlannerState() {
         }
     };
 
-    useEffect(() => { const update = () => { const p = location.hash.slice(1); setPage(['home', 'welcome', 'login', 'signup', 'forgot', 'planner', 'results', 'how', 'privacy', 'trips', 'account'].includes(p) ? p : 'welcome'); window.scrollTo(0, 0); }; window.addEventListener('hashchange', update); const initial = requestAnimationFrame(() => { update(); try {
-        if (!sessionStorage.getItem('aika-intro') && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
-            setIntro(true);
-            sessionStorage.setItem('aika-intro', '1');
+    useEffect(() => {
+        const update = () => {
+            const p = location.hash.slice(1);
+            setPage(['home', 'welcome', 'login', 'signup', 'forgot', 'planner', 'results', 'how', 'privacy', 'trips', 'account'].includes(p) ? p : 'welcome');
+            if (Date.now() - lastNoticeSetTimeRef.current > 50) {
+                setNoticeRaw('');
+            }
+            window.scrollTo(0, 0);
+        };
+        window.addEventListener('hashchange', update);
+        const initial = requestAnimationFrame(() => {
+            update();
+            try {
+                if (!sessionStorage.getItem('aika-intro') && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+                    setIntro(true);
+                    sessionStorage.setItem('aika-intro', '1');
+                }
+            } catch { }
+        });
+        const timer = setTimeout(() => setIntro(false), 2400);
+        return () => {
+            cancelAnimationFrame(initial);
+            clearTimeout(timer);
+            window.removeEventListener('hashchange', update);
+        };
+    }, []);
+
+    const go = (p: string) => {
+        location.hash = p;
+        setPage(p);
+        setError('');
+        if (Date.now() - lastNoticeSetTimeRef.current > 50) {
+            setNoticeRaw('');
         }
-    }
-    catch { } }); const timer = setTimeout(() => setIntro(false), 2400); return () => { cancelAnimationFrame(initial); clearTimeout(timer); window.removeEventListener('hashchange', update); }; }, []);
-    const go = (p: string) => { location.hash = p; setPage(p); setError(''); window.scrollTo(0, 0); };
+        window.scrollTo(0, 0);
+    };
     useEffect(() => {
         let active = true;
         let eventRevision = 0;
@@ -181,7 +263,28 @@ function usePlannerState() {
         clearDraft(session ? session.id : null);
         go('planner');
     };
-    const update = <K extends keyof Trip>(key: K, value: Trip[K]) => { setTrip(t => ({ ...t, [key]: value })); setConfirmed(false); };
+    const update = <K extends keyof Trip>(key: K, value: Trip[K]) => {
+        setTrip(t => {
+            const next = { ...t, [key]: value };
+            if (key === 'arrivalAirport') {
+                const code = value as string;
+                const airportRec = airports[code];
+                next.arrivalZone = airportRec?.zone || '';
+                if (isDomesticIndianAirport(code)) {
+                    // Domestic Indian layover: country eligibility is not applicable, eligible by default
+                    next.entry = 'yes';
+                } else if (t.arrivalAirport && isDomesticIndianAirport(t.arrivalAirport)) {
+                    // Switched from domestic to international or unknown: require traveller confirmation
+                    next.entry = 'unknown';
+                }
+            } else if (key === 'departureAirport') {
+                const code = value as string;
+                next.departureZone = airports[code]?.zone || '';
+            }
+            return next;
+        });
+        setConfirmed(false);
+    };
     async function generate(next = trip) {
         const id = ++request.current;
         setBusy(true);

@@ -46,11 +46,12 @@ export function validateExplanation(raw: unknown, plan: Plan) { const x = explan
     throw Error('AI_CONTRADICTION'); return x; }
 export async function explain(plan: Plan) { if (!process.env.GEMINI_API_KEY || !process.env.GEMINI_MODEL)
     return null; try {
-    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY, httpOptions: { timeout: 8000 } });
+    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY, httpOptions: { timeout: 15000 } });
     const result = await ai.models.generateContent({ model: process.env.GEMINI_MODEL, contents: JSON.stringify({ instruction: 'Explain only these facts in at most two sentences. Do not invent places, times, rules or guarantees. Return the exact status unchanged.', status: plan.status, reason: plan.reason, usableMinutes: plan.usable, missing: plan.missing }), config: { responseMimeType: 'application/json', responseJsonSchema: { type: 'object', properties: { status: { type: 'string', enum: [plan.status] }, summary: { type: 'string' } }, required: ['status', 'summary'], additionalProperties: false } } });
     return validateExplanation(JSON.parse(result.text || ''), plan).summary;
 }
-catch {
+catch (error) {
+    console.error('[AIKA Gemini explain error]', error);
     return null;
 } }
 export async function weather(p: Trip) { if (process.env.ENABLE_WEATHER !== 'true' || p.demo)

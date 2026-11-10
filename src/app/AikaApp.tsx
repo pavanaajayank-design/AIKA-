@@ -1,7 +1,7 @@
 'use client';
 /* eslint-disable @next/next/no-img-element */
 import { useState, useEffect, useRef } from 'react';
-import { ArrowRight, ArrowUpRight, Menu, X, LogOut, FolderOpen, Settings } from 'lucide-react';
+import { ArrowRight, ArrowUpRight, Menu, X, LogOut, FolderOpen, Settings, Download } from 'lucide-react';
 import { PlannerProvider, usePlanner } from './PlannerContext';
 import Brand from '../components/Brand';
 import AuthPage from '../features/auth/AuthPage';
@@ -13,6 +13,14 @@ import HowItWorks from '../features/home/HowItWorks';
 import Privacy from '../features/home/Privacy';
 import Planner from '../features/planner/Planner';
 import Results from '../features/results/Results';
+import {
+    PwaProvider,
+    usePwa,
+    PwaInstallBanner,
+    PwaIOSGuideModal,
+    PwaOfflineBanner,
+    PwaUpdateToast,
+} from '../features/pwa';
 
 export function Shell() {
     const {
@@ -29,7 +37,10 @@ export function Shell() {
         notice,
         setNotice,
         error,
+        setError,
     } = usePlanner();
+
+    const { isInstallable, isInstalled, promptInstall } = usePwa();
 
     const [menu, setMenu] = useState(false);
     const accountMenuRef = useRef<HTMLDetailsElement>(null);
@@ -51,15 +62,24 @@ export function Shell() {
         setMenu(false);
     };
 
-    // REQUIREMENT 1: Automatically dismiss the successful sign-in message after ~5–6 seconds
+    // EDIT 7: Global auto-dismiss for all temporary popup notifications after ~5.5s
     useEffect(() => {
-        if (notice === 'You are signed in.') {
+        if (!notice) return;
+        const timer = window.setTimeout(() => {
+            setNotice((curr) => (curr === notice ? '' : curr));
+        }, 5500);
+        return () => window.clearTimeout(timer);
+    }, [notice, setNotice]);
+
+    // Global auto-dismiss for popup error toasts after ~5.5s
+    useEffect(() => {
+        if (error && page === 'home') {
             const timer = window.setTimeout(() => {
-                setNotice((curr) => (curr === 'You are signed in.' ? '' : curr));
+                setError((curr) => (curr === error ? '' : curr));
             }, 5500);
             return () => window.clearTimeout(timer);
         }
-    }, [notice, setNotice]);
+    }, [error, page, setError]);
 
     // REQUIREMENT 4: Close profile dropdown on outside clicks or Escape key
     useEffect(() => {
@@ -110,6 +130,14 @@ export function Shell() {
                     </button>
                     <button className="nav-button" onClick={() => navigate('how')}>How it works</button>
                     <button className="nav-button" onClick={help}>Help</button>
+                    {isInstallable && !isInstalled && (
+                        <button
+                            className="nav-button nav-install-btn"
+                            onClick={() => { closeAccountMenu(); promptInstall(); setMenu(false); }}
+                        >
+                            <Download size={14} aria-hidden="true" /> Install AIKA
+                        </button>
+                    )}
                     {authLoading ? (
                         <span className="nav-button" role="status">Checking session…</span>
                     ) : !session ? (
@@ -185,12 +213,21 @@ export function Shell() {
                 <div>
                     <a href="#how">Safety & assumptions</a>
                     <a href="#privacy">Privacy</a>
+                    {isInstallable && !isInstalled && (
+                        <button className="nav-button" onClick={promptInstall}>
+                            Install app
+                        </button>
+                    )}
                     <button className="nav-button" onClick={() => { closeAccountMenu(); demo(); setMenu(false); }} disabled={busy}>
                         Sample itinerary
                     </button>
                 </div>
             </footer>
             <HelpPanel />
+            <PwaInstallBanner />
+            <PwaIOSGuideModal />
+            <PwaOfflineBanner />
+            <PwaUpdateToast />
             {busy && page !== 'planner' && (
                 <div className="loading-toast" role="status">Calculating your plan…</div>
             )}
@@ -204,8 +241,9 @@ export function Shell() {
 export default function AikaApp() {
     return (
         <PlannerProvider>
-            <Shell />
+            <PwaProvider>
+                <Shell />
+            </PwaProvider>
         </PlannerProvider>
     );
 }
-

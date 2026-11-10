@@ -13,7 +13,7 @@ const trip = { ...structuredClone(base), airline: 'Demo airline', flight: 'XX 10
 test('welcome screen renders independent AIKA login and guest actions', () => { const html = renderToStaticMarkup(<AikaApp />); assert.ok(html.includes('Welcome to AIKA.')); assert.ok(html.includes('Log in')); assert.ok(html.includes('Sign up')); assert.ok(html.includes('Continue as a guest')); assert.ok(!html.includes('No secure authentication')); assert.ok(!html.includes('FRONTEND PREVIEW')); assert.ok(!html.includes('Kozhikode → Bengaluru → Dubai')); });
 test('arrival catalogue excludes foreign airports; departures include them', () => { const arrival = renderToStaticMarkup(<AirportField label="Arrival" value="" onChange={() => { }} domestic/>); assert.ok(arrival.includes('BLR')); assert.ok(!arrival.includes('DXB')); const departure = renderToStaticMarkup(<AirportField label="Departure" value="" onChange={() => { }}/>); assert.ok(departure.includes('DXB')); assert.ok(departure.includes('JFK')); });
 test('fresh plans do not copy previous data or share mutable scenario state', () => { const a = freshTrip(); a.scenario.arrival = 60; a.flight = 'XX 101'; const b = freshTrip(); assert.equal(b.flight, ''); assert.equal(b.arrivalAirport, ''); assert.equal(b.scenario.arrival, 0); });
-test('required airline and flight are validated', () => { assert.throws(() => validateStep({ ...trip, airline: '' }, 0)); assert.throws(() => validateStep({ ...trip, flight: 'bad' }, 0)); validateStep(trip, 0); assert.throws(() => validateStep({ ...trip, arrivalAirport: 'DXB' }, 0)); });
+test('required airline and flight are validated', () => { assert.throws(() => validateStep({ ...trip, airline: '' }, 0)); assert.throws(() => validateStep({ ...trip, flight: 'bad' }, 0)); validateStep(trip, 0); assert.throws(() => validateStep({ ...trip, arrivalAirport: 'XYZ' }, 0)); });
 test('demo account validates input without storing or returning password', async () => { const services = createDemoServices(); assert.equal(credentialsSchema.safeParse({ email: 'bad', password: 'short' }).success, false); const result = await services.auth.signUp({ name: 'Traveller', email: 'person@example.test', password: 'sample123' }); assert.equal(result.session?.mode, 'demo'); assert.ok(!('password' in result)); await assert.rejects(() => services.auth.requestPasswordReset('person@example.test'), /No email was sent/); });
 test('demo trip CRUD and manual statuses work in memory', async () => { const s = createDemoServices(); const first = await s.trips.create(trip, demoPlan(trip)); const second = await s.trips.create({ ...trip, flight: 'XX 102' }, demoPlan({ ...trip, flight: 'XX 102' })); assert.notEqual(first.id, second.id); await s.trips.update(first.id, { status: 'completed' }); assert.equal((await s.trips.list()).filter(t => t.status === 'completed').length, 1); await s.trips.remove(first.id); assert.equal((await s.trips.list()).length, 1); await s.auth.signOut(); assert.equal((await s.trips.list()).length, 0); assert.equal((await createDemoServices().trips.list()).length, 0); });
 test('trip service returns independent snapshots', async () => { const s = createDemoServices(); const saved = await s.trips.create(trip, demoPlan(trip)); saved.input.flight = 'XX 999'; assert.equal((await s.trips.list())[0].input.flight, 'XX 101'); });
@@ -66,9 +66,10 @@ const mockPlannerState = {
 test('header brand logo renders transparent asset with responsive square dimensions', () => {
     const headerHtml = renderToStaticMarkup(<Brand />);
     assert.ok(headerHtml.includes('/images/aika-logo.png'));
-    assert.ok(headerHtml.includes('width="54"'));
-    assert.ok(headerHtml.includes('height="54"'));
+    assert.ok(headerHtml.includes('width="64"'));
+    assert.ok(headerHtml.includes('height="64"'));
     assert.ok(!headerHtml.includes('aika-logo.jpeg'));
+    assert.ok(!headerHtml.includes('AIKA<span class="brand-dot">.</span>'));
 
     const largeHtml = renderToStaticMarkup(<Brand large />);
     assert.ok(largeHtml.includes('/images/aika-logo.png'));
@@ -113,36 +114,43 @@ test('signup flow differentiates email confirmation requirement and immediate lo
     assert.ok(msgImmediate.includes('Account created successfully! Please log in with your new credentials.'));
 });
 
-test('sign-in success message auto-dismisses after ~5.5s and does not dismiss unrelated notices', async () => {
+test('all temporary popup notifications auto-dismiss after ~5.5s and timers reset when updated', async () => {
     let currentNotice = 'You are signed in.';
     const setNotice = (updater: string | ((curr: string) => string)) => {
         currentNotice = typeof updater === 'function' ? updater(currentNotice) : updater;
     };
 
-    // Simulate auto-dismiss timer logic as implemented in Shell
+    // Simulate auto-dismiss timer logic as implemented in Shell and PlannerContext
     const createDismissTimer = (notice: string, setter: typeof setNotice, delay = 5500) => {
-        if (notice === 'You are signed in.') {
+        if (notice) {
             return setTimeout(() => {
-                setter((curr) => (curr === 'You are signed in.' ? '' : curr));
+                setter((curr) => (curr === notice ? '' : curr));
             }, delay);
         }
         return null;
     };
 
-    // 1. Armed when "You are signed in."
+    // 1. Armed and auto-dismissed for "You are signed in."
     let timer = createDismissTimer(currentNotice, setNotice, 10);
     assert.ok(timer !== null);
     await new Promise((r) => setTimeout(r, 20));
     assert.equal(currentNotice, '');
 
-    // 2. Unrelated notices are NOT dismissed
+    // 2. Armed and auto-dismissed for trip status/update notices
     currentNotice = 'Trip updated successfully in My Trips.';
     timer = createDismissTimer(currentNotice, setNotice, 10);
-    assert.equal(timer, null);
+    assert.ok(timer !== null);
     await new Promise((r) => setTimeout(r, 20));
-    assert.equal(currentNotice, 'Trip updated successfully in My Trips.');
+    assert.equal(currentNotice, '');
 
-    // 3. If notice changes before timer fires, previous timer does not clear new notice
+    // 3. Armed and auto-dismissed for trip deletion messages
+    currentNotice = 'Trip deleted successfully.';
+    timer = createDismissTimer(currentNotice, setNotice, 10);
+    assert.ok(timer !== null);
+    await new Promise((r) => setTimeout(r, 20));
+    assert.equal(currentNotice, '');
+
+    // 4. If notice changes before timer fires, previous timer does not clear new notice
     currentNotice = 'You are signed in.';
     timer = createDismissTimer(currentNotice, setNotice, 50);
     currentNotice = 'Important warning'; // User action changed notice
@@ -220,6 +228,11 @@ test('hero illustration renders caption with complete typography hierarchy and f
     assert.ok(html.includes('Before your next takeoff.'));
     assert.ok(html.includes('class="floating-plan"'));
     assert.ok(html.includes('Your next flight comes first.'));
+    // Headline maintains whitespace before line break to prevent "adventureis" when br is hidden on mobile
+    assert.ok(html.includes('Your next adventure <br/>is between <br/><em>flights.</em>'));
+    // Visual-top maintains grouped location pin and text
+    assert.ok(html.includes('<div class="visual-top"><span><svg'));
+    assert.ok(html.includes('A LITTLE TIME OUTSIDE</span></div>'));
 });
 
 test('authenticated calculation workflow automatically saves itinerary and assigns activeId', async () => {

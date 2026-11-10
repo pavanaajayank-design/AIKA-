@@ -59,6 +59,7 @@ test('all referenced PWA icon assets exist on disk with correct dimensions', () 
     { file: 'public/icons/icon-192x192.png', width: 192, height: 192 },
     { file: 'public/icons/icon-512x512.png', width: 512, height: 512 },
     { file: 'public/icons/icon-maskable-512x512.png', width: 512, height: 512 },
+    { file: 'public/icons/icon-maskable-192x192.png', width: 192, height: 192 },
     { file: 'public/icons/apple-touch-icon.png', width: 180, height: 180 },
     { file: 'public/icons/favicon-64x64.png', width: 64, height: 64 },
   ];

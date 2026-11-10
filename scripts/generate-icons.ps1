@@ -35,8 +35,11 @@ function Resize-Icon([int]$w, [int]$h, [string]$destPath, [string]$bg = "", [dou
 Resize-Icon 192 192 'public/icons/icon-192x192.png' "" 1.0
 Resize-Icon 512 512 'public/icons/icon-512x512.png' "" 1.0
 Resize-Icon 512 512 'public/icons/icon-maskable-512x512.png' "#f6f6ef" 0.8
+Resize-Icon 192 192 'public/icons/icon-maskable-192x192.png' "#f6f6ef" 0.8
 Resize-Icon 180 180 'public/icons/apple-touch-icon.png' "#f6f6ef" 0.9
 Resize-Icon 64 64 'public/icons/favicon-64x64.png' "" 1.0
+Resize-Icon 32 32 'public/icons/favicon-32x32.png' "" 1.0
+Resize-Icon 16 16 'public/icons/favicon-16x16.png' "" 1.0
 
 $src.Dispose()
 Write-Host "All PWA icons generated successfully."

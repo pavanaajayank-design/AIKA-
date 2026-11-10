@@ -1,18 +1,22 @@
 /// <reference lib="webworker" />
 
-const CACHE_NAME = 'aika-shell-v1';
+const CACHE_NAME = 'aika-shell-v2';
 
 // Static application shell assets only — never dynamic or user data
 const PRECACHE_ASSETS = [
   '/',
   '/index.html',
   '/manifest.webmanifest',
+  '/manifest.json',
   '/images/aika-logo.png',
   '/icons/icon-192x192.png',
   '/icons/icon-512x512.png',
   '/icons/icon-maskable-512x512.png',
+  '/icons/icon-maskable-192x192.png',
   '/icons/apple-touch-icon.png',
   '/icons/favicon-64x64.png',
+  '/icons/favicon-32x32.png',
+  '/icons/favicon-16x16.png',
 ];
 
 self.addEventListener('install', (event) => {
@@ -43,6 +47,13 @@ self.addEventListener('activate', (event) => {
       )
       .then(() => self.clients.claim())
   );
+});
+
+// Support lifecycle updates from client
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
 });
 
 self.addEventListener('fetch', (event) => {

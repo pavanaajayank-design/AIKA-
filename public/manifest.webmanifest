@@ -3,7 +3,7 @@
   "id": "/",
   "name": "AIKA — Explore on Time",
   "short_name": "AIKA",
-  "description": "Smart, safety-first layover planner. Explore between flights without missing takeoff.",
+  "description": "A thoughtful AI-powered travel companion that helps travellers turn airport layovers into meaningful discoveries while prioritising their next flight.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
@@ -12,7 +12,8 @@
   "orientation": "portrait-primary",
   "categories": [
     "travel",
-    "utilities"
+    "utilities",
+    "lifestyle"
   ],
   "icons": [
     {
@@ -32,6 +33,28 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
+    },
+    {
+      "src": "/icons/icon-maskable-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Plan Layover",
+      "short_name": "Plan",
+      "description": "Start planning an airport layover",
+      "url": "/#planner",
+      "icons": [{ "src": "/icons/icon-192x192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "My Trips",
+      "short_name": "Trips",
+      "description": "View saved trips and itineraries",
+      "url": "/#trips",
+      "icons": [{ "src": "/icons/icon-192x192.png", "sizes": "192x192" }]
     }
   ]
 }
