@@ -3,7 +3,7 @@ import { createContext, useContext, useEffect, useRef, useState, type ReactNode 
 import { DateTime, IANAZone } from 'luxon';
 import { base, calculate, schema, airports, isDomesticIndianAirport, type Trip, type Place } from '../../lib/aika/engine';
 import { createServices } from '../services';
-import { readClientConfig } from '../services/config';
+import { readClientConfig, getClientDiagnostics } from '../services/config';
 import type { PlanResult, AppSession, SavedTrip } from '../models/contracts';
 import { loadDraft, saveDraft, clearDraft } from '../services/draft-storage';
 export const freshTrip = (): Trip => ({ ...structuredClone(base), origin: '', destination: '', arrivalAirport: '', departureAirport: '', arrival: '', departure: '', arrivalZone: '', departureZone: '', airline: '', flight: '', entry: 'unknown', terminal: 'unknown', demo: false });
@@ -49,7 +49,14 @@ function usePlannerState() {
         [notice, setNoticeRaw] = useState(''),
         [noticeVersion, setNoticeVersion] = useState(0);
 
-    const [services] = useState(() => { const config = readClientConfig(import.meta.env || {}); return createServices(config.mode, config.baseUrl); });
+    const [services] = useState(() => {
+        const config = readClientConfig();
+        return createServices(config.mode, config.baseUrl);
+    });
+
+    useEffect(() => {
+        getClientDiagnostics();
+    }, []);
     const request = useRef(0);
     const restoredIdentityRef = useRef<string | null | undefined>(undefined);
     const lastNoticeSetTimeRef = useRef(0);
